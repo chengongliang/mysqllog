@@ -153,7 +153,8 @@ func parseEntry(lines []string) LogEvent {
 				event["Timestamp"] = unixTimestampString
 				i, err := strconv.ParseInt(unixTimestampString, 10, 64)
 				if err == nil {
-					event["Timestamp"] = time.Unix(i, 0).UTC()
+					//event["Timestamp"] = time.Unix(i, 0).UTC()
+					event["Timestamp"] = time.Unix(i, 0).Format("2006-01-02 15:04:05")
 				}
 			}
 			continue

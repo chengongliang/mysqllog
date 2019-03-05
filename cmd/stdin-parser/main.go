@@ -5,21 +5,24 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/Unknwon/goconfig"
-	"github.com/chengongliang/mysqllog"
-	"github.com/hpcloud/tail"
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"sync"
+
+	"github.com/chengongliang/mysqllog"
+	"github.com/hpcloud/tail"
+
+	"github.com/Unknwon/goconfig"
 )
 
 type CONF struct {
-	Token   string
-	LogFile string
-	QTime   string
+	Token string
+	QTime string
+	Log   string
 }
 
-func SendDingTalk(message, token string) {
+func sendDingTalk(message, token string) {
 	type cnt struct {
 		Text  string `json:"text"`
 		Title string `json:"title"`
@@ -49,7 +52,7 @@ func SendDingTalk(message, token string) {
 }
 
 func main() {
-	p := &mysqllog.Parser{}
+	//cfg, err := goconfig.LoadConfigFile("/Users/chengongliang/go/src/github.com/chengongliang/mysqllog/cmd/stdin-parser/conf.ini")
 	cfg, err := goconfig.LoadConfigFile("conf.ini")
 	if err != nil {
 		panic("未找到 conf.ini 文件.")
@@ -59,29 +62,51 @@ func main() {
 	if err != nil {
 		fmt.Println("dintTalk -> token 未配置")
 	}
-	c.LogFile, err = cfg.GetValue("log", "path")
+	c.Log, _ = cfg.GetValue("logs", "path")
 	if err != nil {
-		fmt.Println("log -> path 未配置")
+		fmt.Println("logs -> path 未配置")
 	}
-	c.QTime, err = cfg.GetValue("log", "query_time")
+	c.QTime, err = cfg.GetValue("base", "query_time")
 	if err != nil {
-		fmt.Println("log -> query_time 未配置")
+		fmt.Println("base -> query_time 未配置")
 	}
-	qTime, _ := strconv.ParseFloat(c.QTime, 32/64)
-	t, err := tail.TailFile(c.LogFile, tail.Config{Follow: true})
-	if err != nil {
+	type Target struct {
+		Addr    string `json:"addr"`
+		LogFile string `json:"log_file"`
+	}
+	var target []Target
+	er := json.Unmarshal([]byte(c.Log), &target)
+	if er != nil {
 		fmt.Println(err)
 	}
-	for line := range t.Lines {
-		event := p.ConsumeLine(line.Text)
-		if event != nil && len(event) != 0 {
-			if event["Query_time"] == nil {
-				continue
+	var wg sync.WaitGroup
+	for _, v := range target {
+		wg.Add(1)
+		go func(v Target) {
+			fmt.Println("开始监控: ", v.LogFile)
+			p := &mysqllog.Parser{}
+			qTime, _ := strconv.ParseFloat(c.QTime, 32/64)
+			t, err := tail.TailFile(v.LogFile, tail.Config{Follow: true})
+			if err != nil {
+				fmt.Println(err)
 			}
-			if event["Query_time"].(float64) > qTime {
-				msg := fmt.Sprintf("# <font face=\"微软雅黑\">慢SQL通知</font>\n \n <br/> \n **数据库:** %v\n\n<br/>**IP:** %v\n\n<br/>**SQL 时间:** %v\n\n<br/>**执行时间:** %v\n\n<br/>**执行内容:** %v", event["Schema"], event["IP"], event["Timestamp"], event["Query_time"], event["Statement"])
-				SendDingTalk(msg, c.Token)
+			for line := range t.Lines {
+				event := p.ConsumeLine(line.Text)
+				if event != nil && len(event) != 0 {
+					if event["Query_time"] == nil {
+						continue
+					}
+					if event["Query_time"].(float64) > qTime {
+						msg := fmt.Sprintf("# <font face=\"微软雅黑\">慢SQL通知</font>\n\n<br/>\n**地址:** %v\n\n<br/>**DB:** %v\n\n<br/>**来源IP:** %v\n\n<br/>**SQL 时间:** %v\n\n<br/>**执行时间:** %v\n\n<br/>**执行内容:** %v",
+							v.Addr, event["Schema"], event["IP"], event["Timestamp"], event["Query_time"], event["Statement"])
+						sendDingTalk(msg, c.Token)
+						//fmt.Println(msg)
+					}
+				}
 			}
-		}
+			fmt.Println("end")
+			defer wg.Done()
+		}(v)
 	}
+	wg.Wait()
 }
