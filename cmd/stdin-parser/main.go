@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/chengongliang/mysqllog"
@@ -17,9 +18,10 @@ import (
 )
 
 type CONF struct {
-	Token string
-	QTime string
-	Log   string
+	Token   string
+	QTime   string
+	WhiteIP string
+	Log     string
 }
 
 func sendDingTalk(message, token string) {
@@ -70,6 +72,10 @@ func main() {
 	if err != nil {
 		fmt.Println("base -> query_time 未配置")
 	}
+	c.WhiteIP, err = cfg.GetValue("base", "white_ip")
+	if err != nil {
+		fmt.Println("base -> white_ip 未配置")
+	}
 	type Target struct {
 		Addr    string `json:"addr"`
 		LogFile string `json:"log_file"`
@@ -93,11 +99,11 @@ func main() {
 			for line := range t.Lines {
 				event := p.ConsumeLine(line.Text)
 				if event != nil && len(event) != 0 {
-					if event["Query_time"] == nil {
+					if event["Query_time"] == nil || strings.Contains(c.WhiteIP, event["IP"].(string)) {
 						continue
 					}
 					if event["Query_time"].(float64) > qTime {
-						msg := fmt.Sprintf("# <font face=\"微软雅黑\">慢SQL通知</font>\n\n<br/>\n**地址:** %v\n\n<br/>**DB:** %v\n\n<br/>**来源IP:** %v\n\n<br/>**SQL 时间:** %v\n\n<br/>**执行时间:** %v\n\n<br/>**执行内容:** %v",
+						msg := fmt.Sprintf("# <font face=\"微软雅黑\">慢SQL通知</font>\n\n<br/>\n**地址:** %v\n\n<br/>**DB:** %v\n\n<br/>**来源IP:** %v\n\n<br/>**SQL 时间:** %v\n\n<br/>**执行时间:** %v\n\n<br/>**执行内容:** ```%v```",
 							v.Addr, event["Schema"], event["IP"], event["Timestamp"], event["Query_time"], event["Statement"])
 						sendDingTalk(msg, c.Token)
 						//fmt.Println(msg)

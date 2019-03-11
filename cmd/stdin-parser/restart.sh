@@ -25,6 +25,7 @@ check_conf(){
 	cat >> conf.ini <<EOF
 [base]
 query_time=3
+white_ip=127.0.0.1
 [dingTalk]
 token=${token}
 [logs]
