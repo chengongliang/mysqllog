@@ -103,10 +103,9 @@ func main() {
 						continue
 					}
 					if event["Query_time"].(float64) > qTime {
-						msg := fmt.Sprintf("# <font face=\"微软雅黑\">慢SQL通知</font>\n\n<br/>\n**地址:** %v\n\n<br/>**DB:** %v\n\n<br/>**来源IP:** %v\n\n<br/>**SQL 时间:** %v\n\n<br/>**执行时间:** %v\n\n<br/>**执行内容:** ```%v```",
+						msg := fmt.Sprintf("# <font face=\"微软雅黑\">慢SQL通知</font>\n\n<br/>\n**地址:** %v\n\n<br/>**DB:** %v\n\n<br/>**来源IP:** %v\n\n<br/>**SQL 时间:** %v\n\n<br/>**执行时间:** %v\n\n<br/>**执行内容:**\n\n<br/ >```%v```",
 							v.Addr, event["Schema"], event["IP"], event["Timestamp"], event["Query_time"], event["Statement"])
 						sendDingTalk(msg, c.Token)
-						//fmt.Println(msg)
 					}
 				}
 			}
